@@ -1,0 +1,209 @@
+#pragma once
+#include "ofMain.h"
+#include "ofxOpenCv.h"
+#define NLINES 1000 // constant number of lines
+
+struct Normal {
+    ofVec2f mPoint;
+    ofVec2f mDir;
+};
+
+class ofApp : public ofBaseApp{
+	public:
+		void setup();
+		void update();
+		void draw();
+    
+		void keyPressed(int button);
+		void keyReleased(int key);
+		void mouseMoved(int x, int y );
+		void mouseDragged(int x, int y, int button);
+		void mousePressed(int x, int y, int button);
+		void mouseReleased(int x, int y, int button);
+		void mouseEntered(int x, int y);
+		void mouseExited(int x, int y);
+		void windowResized(int w, int h);
+		void dragEvent(ofDragInfo dragInfo);
+		void gotMessage(ofMessage msg);
+    
+    // CAM-VID
+    ofVideoGrabber video;		//Declare the video player
+    //CV
+    ofxCvColorImage image;
+    ofxCvColorImage imageDecimated;
+    ofxCvGrayscaleImage grayImage;
+    ofxCvGrayscaleImage blurred;
+    ofxCvGrayscaleImage background;
+    ofxCvGrayscaleImage diff;
+    ofxCvGrayscaleImage mask;
+    bool debug;
+    
+    // BLOBS/POLYLINE
+    ofxCvContourFinder 	contourFinder;
+    vector <ofPolyline> polyLine;
+    //VECTORS
+    vector<vector<ofPolyline>> polyLineStorage;
+    vector<ofxCvBlob>  blobs;
+    vector<ofPoint> myStorage;
+    vector<Normal> mNormals;
+    vector <ofVec2f> mNormStorage;
+    ofVec3f center;
+    ofVec3f end;
+    vector <ofPoint> cameraWorld;
+    ofPoint debugPoint = ofPoint(0,0);
+    //IMAGE
+    ofImage src;
+    //BOOLEAN
+    bool backSub;
+    bool cvOn;
+    bool camRGB;
+    bool playPoly;
+    bool growing;
+    bool savePoly;
+    //OTHER FLOATS
+    float time, t;
+    int  angle;
+    };
+
+//--------------------------------------------------------------
+
+#include "ofApp.h"
+#define WIDTH  1000
+#define HEIGHT 600
+
+void ofApp::setup(){
+    //STANDARD
+    ofSetBackgroundAuto(false);
+    ofBackground(255, 0, 0);
+    ofSetCircleResolution(25);
+    ofEnableAntiAliasing();
+    ofSetFrameRate(60);
+    ofEnableDepthTest();
+    
+    // IMAGE
+    src.load("mk.jpg");
+    src.resize(WIDTH, HEIGHT);
+    //cout << ofGetWidth() << endl;
+    
+    //CAM-VID SETUP
+    video.setDeviceID(0);
+    video.setDesiredFrameRate(60);
+    video.initGrabber(WIDTH, HEIGHT);
+
+    //CLASS FOR GRID PLAY WHILE USING ofXOptionalFlow
+    //grid.setup();
+    
+    //TIME
+    t = 0;
+}
+//--------------------------------------------------------------
+void ofApp::update(){
+    // CAM-VID UPDATE
+    video.update();
+    if ( video.isFrameNew()) {
+        image.setFromPixels( video.getPixelsRef());
+//ALLOCATION 01
+        if ( !imageDecimated.bAllocated ){
+            imageDecimated.allocate( WIDTH, HEIGHT);
+        }
+//STORING BACKGROUND IMAGE
+        imageDecimated.scaleIntoMe( image, CV_INTER_AREA);
+        grayImage = imageDecimated;
+        blurred = grayImage;
+        blurred.blurGaussian(5);
+        if ( !background.bAllocated ){
+            background = blurred;
+        }
+        // DIFFEREANCE OF FRAME AND BACKGROUND
+        diff = blurred;
+        diff.absDiff(blurred, background); // general case
+        //THRESHOLD IMAGE
+        mask = diff;
+        mask.threshold(45);
+        //FIND CONTOURS
+        contourFinder.findContours( mask, 10, 10000, 20, true );
+    }
+//TIME UPDATE
+    t++;
+    int minutes = 3;
+    int totalMillis = minutes * 60 * 1000; //180k
+    time = ofMap (ofGetElapsedTimeMillis(), 0, totalMillis, 0, 3,
+                  true);
+    // VECTORS WITH REF TO CONTOURFINDER
+    vector<ofxCvBlob> * pBlobs = &contourFinder.blobs;
+    polyLine.clear();
+        for (int i = 0; i < pBlobs->size(); i++){
+        ofPolyline taP1;
+        taP1.addVertices(pBlobs->at(i).pts);
+        taP1.addVertex(pBlobs->at(i).pts[0]);
+        taP1 = taP1.getResampledBySpacing(10);
+        polyLine.reserve(1000);
+        polyLine.push_back(taP1);
+    }
+    //NORMS THE CONTOURING AT WORK //******** TIME THESE OR REMOVE ******//
+    //mNormals.clear();
+    //myStorage.clear();
+    //POLYLINE
+    for (int i = 0; i <  polyLine.size(); i++)
+    {
+        vector<ofPoint> hori = polyLine[i].getVertices();
+        for ( int o = 0; o < hori.size() -1; o++)
+        {
+            ofVec2f p1( hori[o].x, hori[o].y);
+            ofVec2f p2(hori[o+100].x, hori[o+ 10].y);
+            float dx = p2.y+p1.y;
+            float dy = p2.x-p1.x;
+            ofVec2f nam (dx, dy);
+            nam.perpendicular();
+            nam *=30;
+            Normal n;
+            ofVec2f circular (hori[o].x / 100 + dy * 10.75, hori[o].y + dx * 5.5);
+            n.mPoint.set(hori[o].x, hori[o].y);
+            n.mDir.set(nam.x, nam.y);
+            mNormals.reserve(1000);
+            mNormals.push_back(n);
+            mNormStorage.reserve(1000);
+            mNormStorage.push_back(ofVec2f(mNormals[i].mPoint.x, mNormals[i].mPoint.y));
+        }
+    }
+    //grid.update();
+    //TIME END
+    if (time>=3.00) ofExit();
+}
+
+//--------------------------------------------------------------
+void ofApp::draw(){
+    if (time > 0.10 && time < 3.00) {
+    // Camera Vison START
+    //ALLOCATION 02 //DECIMINATION
+        if (camRGB == true ){
+        imageDecimated.draw(WIDTH,HEIGHT);
+    }
+    //ALLOCATION 03 //CAM/MASK
+     if (backSub == true ){
+        imageDecimated.draw(WIDTH,HEIGHT);
+        mask.draw(0,0);
+    }
+    //ALLOCATION 04 //****// CONTOURS
+        ofSetColor(255,0,0);
+        ofFill();
+        contourFinder.draw(600, 700, 20,20);
+    // DRAW POLYLINE
+            for (int i = 0; i < polyLine.size(); i++) {
+            polyLine[i].draw();
+            }
+            for(int i = 0; i < mNormals.size(); i++) {
+            ofColor myCol = src.getPixelsRef().getColor(mNormals[i].mPoint.x, mNormals[i].mPoint.y);
+            ofSetColor(myCol);
+            ofFill();
+            ofVec2f p2 = mNormals[i].mPoint + mNormals[i].mDir;
+            ofDrawCircle(mNormals[i].mPoint.x,mNormals[i].mPoint.y, 5);
+        }
+    }
+}
+
+void ofApp::mousePressed(int x, int y, int button){
+    debug = !debug;
+}
+
+//--------------------------------------------------------------
