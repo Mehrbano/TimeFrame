@@ -1,0 +1,123 @@
+#include "ofApp.h"
+//========================================================================
+int main( ){
+    ofSetupOpenGL(1000,600, OF_WINDOW); 
+    // <-------- setup the GL context
+    // this kicks off the running of my app
+    // can be OF_WINDOW or OF_FULLSCREEN
+    // pass in width and height too:
+    ofRunApp( new ofApp());
+}
+//========================================================================
+
+#pragma once
+
+#include "ofMain.h"
+#include "ofxOpticalFlowFarneback.h"
+
+#define ROWS 100
+#define COLUMNS 100
+#define O_NUTS ROWS * COLUMNS
+
+class ofApp : public ofBaseApp {
+	public:
+		void setup();
+		void update();
+		void draw();
+
+//IMPORT VIDEO
+        ofVideoPlayer video;
+//CAM
+        ofVideoGrabber vidGrabber;
+//DECLARE OPTIC FLOW
+		ofxOpticalFlowFarneback flowSolver;
+//INTS/FLOATS
+        float rotation [O_NUTS];
+		    float rotationVelocity [O_NUTS];
+        float speed;
+        float dx, dy, xin, yin, x, y, segLength;
+//TO IMPORT IMAGES
+        ofImage image2;
+};
+//========================================================================
+
+#include "ofApp.h"
+#define WIDTH  1000
+#define HEIGHT 600
+
+//--------------------------------------------------------------
+
+void ofApp::setup() {
+    
+    ofSetBackgroundColor(255);
+    ofSetBackgroundColor(false);
+	  ofEnableDepthTest();
+    ofEnableAlphaBlending();
+	  vidGrabber.setDesiredFrameRate(30);
+	  vidGrabber.initGrabber (320, 240);
+    
+// LOAD VIDEO OF PHASE ONE
+    video.loadMovie( "Final_Second_Term_Small.mov" );
+    video.play();
+// LOAD IMAGE
+    image2.load("mk2.png");
+    image2.resize(WIDTH, HEIGHT);
+// FROM OPTICALFLOWFARNEBACK ADDON
+    flowSolver.setup (vidGrabber.getWidth(),vidGrabber.getHeight(), 0.35, 1, 100, 1, 3, 0.25, false, false);
+    for(int i=0; i<O_NUTS; i++){
+		rotation[i] = 360;
+	}
+}
+
+//--------------------------------------------------------------
+
+void ofApp::update() {
+    
+	video.update();
+    vidGrabber.update();
+	  if(vidGrabber.isFrameNew()){
+		flowSolver.update(vidGrabber);
+	}
+// ROTATION VALUE & VELOCITY SLOW DOWN // FROM OPTICALFLOWFARNEBACK
+	  for(int i = 0; i < O_NUTS; i++) {
+		 rotation[i] += rotationVelocity[i];
+		 rotationVelocity[i] *= 0.9;
+	}
+}
+
+//--------------------------------------------------------------
+
+void ofApp::draw() {
+    ofSetBackgroundColor(255, 0, 0);
+//PLAY VIDEO IN BACKGROUND
+    video.draw(0, 0, WIDTH, HEIGHT);
+//OPTICALFLOW
+    float d = ofGetWidth() / COLUMNS ;
+	  float p = ofGetWidth() / ROWS ;
+	  float se = image2.getHeight() / COLUMNS ;     // SQUARE FROM CAM
+	  float sw = image2.getHeight() / ROWS ;        // SQUARE FROM CAM
+    int i = 0;
+    for (int row = 0; row < ROWS; row++){
+    	for(int column = 0; column < COLUMNS; column++){
+      float x = row * d;
+			float y = column * p;
+			float nx = row * se;
+			float ny = column * sw;
+//MIDDLE GRID FLOW
+            float angle = TWO_PI;
+            float fx = nx + (se/2) * angle;
+			      float fy = ny + (sw/2);
+		ofPoint flow = flowSolver.getVelAtPixel(fx, fy);
+		rotationVelocity[i] += flow.length() / 3.0;
+
+			ofPushMatrix();
+      ofTranslate(x-(d/2), y);
+			ofRotateY(rotation[i]);
+      ofTranslate(-(d/2), 0);
+      image2.getTextureReference().drawSubsection(0, 0, d, p, nx, ny, se, sw);
+      ofPopMatrix();
+        
+        i++;
+		}
+	}
+}
