@@ -184,14 +184,15 @@ void ofApp::frame(float p){
         ofPushStyle();
         ofSetPolyMode(OF_POLY_WINDING_ODD);
         ofTranslate(ofGetWidth()/2, ofGetHeight()/2);
+        int diam = ofMap (0.5, PI, 0.3, 20, 10);
         ofRotateZ(p);
-        float s = abs(sin(ofDegToRad(p))) + 0.3;
+        float s = abs (sin (ofDegToRad (p))) /0.3 ;
         ofScale(s,s,s);
         ofNoFill();
         ofSetColor(255,250,70);
         ofSetLineWidth(2);
-        ofDrawRectangle(x, y, 500,500);
-        image.draw(x, y, 500,500);
+        ofDrawRectangle(0, diam, 100,100);
+        image2.draw(0, diam, 100,100);
         ofPopMatrix();
         ofPopStyle();
         }
@@ -227,6 +228,7 @@ void ofApp::frame(float p){
     
 //FOURTH INTERACTION WITH VIDEO
     if (time > 2.65 && time < 2.90) {
+        
         ofPushMatrix();
         ofPushStyle();
         ofSetRectMode(OF_RECTMODE_CENTER);
